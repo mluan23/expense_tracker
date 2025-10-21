@@ -144,3 +144,9 @@ def get_dataset(
         all_classes
     )
     return train_dataset, valid_dataset
+
+def get_data_loaders(train_dataset, valid_dataset, batch_size):
+    train_data_loader = DataLoader(train_dataset, batch_size=batch_size)
+    valid_data_loader = DataLoader(valid_dataset, batch_size=batch_size)
+
+    return train_data_loader, valid_data_loader
