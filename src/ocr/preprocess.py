@@ -13,12 +13,13 @@ def main():
     # gives a numpy array, grayscale b/c only want the text
     # image.shape is (height, width, 3 BGR channels)
     # but with using grayscale is just (height, width)
-    img = cv2.imread(image_path + "receipt.jpg", cv2.IMREAD_GRAYSCALE)
+    img = cv2.imread(image_path + "target_receipt.jpg", cv2.IMREAD_GRAYSCALE)
     # img = cv2.imread(image_path + "receipt3.jpg")
 
     # img = process_image(img)
     # img = remove(img)
-    img = reduce_shadow(img)
+    # img = reduce_shadow(img)
+    # img = fill_text(img)
 
     print(pytesseract.image_to_string(img))
     # img = remove(img)
@@ -31,8 +32,9 @@ def main():
     # img = deskew_image(img)
     # img = normalize_image(img)
     # img = threshold_image(img)
-    cv2.imwrite(image_path + 'gaussian9.jpg', img)
+    cv2.imwrite(image_path + 'gaussian10.jpg', img)
     return
+
 
 def f(img):
     h, w = img.shape[:2]
@@ -47,11 +49,29 @@ def f(img):
     mask = 255 - morph
     result = cv2.bitwise_and(img, img, mask=mask)
     return result
+
+
 def reduce_blur(img):
     if len(img.shape) == 3:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+
 # definitely has some room for improvement
+
+# intended to work on binary separated using otsu's method
+def fill_text(otsu_img):
+    # kernel for connecting broken letters
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+
+    # closing = dilation then erosion
+    # gaussian 8 = 1,3
+    # 1, 3 seems to be best, can always go back though
+    # nevermind 1,2 doesn't matter how it looks to human eyes
+    dilated = cv2.dilate(otsu_img, kernel, iterations=1)
+    closed = cv2.erode(dilated, kernel, iterations=3)
+    return closed
+
+
 def reduce_shadow(img):
     if len(img.shape) == 3:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -70,16 +90,7 @@ def reduce_shadow(img):
     # otsu's method is used here because we've effective split the foreground and background,
     # giving us the bimodal lighting that otsu's needs to work properly
     thresh = cv2.threshold(divide, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-
-    # kernel for connecting broken letters
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-
-    # closing = dilation then erosion
-    # gaussian 8 = 1,3
-    # 1, 3 seems to be best, can always go back though
-    dilated = cv2.dilate(thresh, kernel, iterations=1)
-    closed = cv2.erode(dilated, kernel, iterations=3)
-    return closed
+    return thresh
 
     # mask = np.zeros(divide.shape[:2], np.uint8)
     # bgdModel = np.zeros((1, 65), np.float64)
@@ -101,38 +112,40 @@ def normalize_image(img):
 
 
 def process_image(img):
-        height, width = img.shape[:2]
-        margin = 0.05  # 5% margin
-        x = int(width * margin)
-        y = int(height * margin)
-        rect = (x, y, width - 2 * x, height - 2 * y)
+    height, width = img.shape[:2]
+    margin = 0.05  # 5% margin
+    x = int(width * margin)
+    y = int(height * margin)
+    rect = (x, y, width - 2 * x, height - 2 * y)
 
-        # Create mask and models
+    # Create mask and models
 
-        mask = np.zeros(img.shape[:2], np.uint8)
-        bgdModel = np.zeros((1, 65), np.float64)
-        fgdModel = np.zeros((1, 65), np.float64)
+    mask = np.zeros(img.shape[:2], np.uint8)
+    bgdModel = np.zeros((1, 65), np.float64)
+    fgdModel = np.zeros((1, 65), np.float64)
 
-        # Apply GrabCut
+    # Apply GrabCut
 
-        cv2.grabCut(img, mask, rect, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_RECT)
+    cv2.grabCut(img, mask, rect, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_RECT)
 
-        # Create binary mask
+    # Create binary mask
 
-        mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype("uint8")
+    mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype("uint8")
 
-        # Convert to RGBA and apply mask to alpha channel
+    # Convert to RGBA and apply mask to alpha channel
 
-        output_rgba = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
-        output_rgba[:, :, 3] = mask2 * 255  # 0 for background, 255 for foreground
-        return output_rgba
+    output_rgba = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
+    output_rgba[:, :, 3] = mask2 * 255  # 0 for background, 255 for foreground
+    return output_rgba
 
-        # Save as PNG to preserve transparency
+    # Save as PNG to preserve transparency
+
 
 def threshold_image(img):
     # don't really care about the threshold value
     _, binary = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return binary
+
 
 def remove_bg(img):
     if len(img.shape) == 3:
@@ -140,6 +153,7 @@ def remove_bg(img):
     kernel = np.ones((3, 3), np.uint8)
     cleaned = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
     return cleaned
+
 
 # fixing rotated/tilted text
 def deskew_image(img):
@@ -182,7 +196,7 @@ def adaptive_threshold(img):
     ret, th1 = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
     th2 = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
     th3 = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                               cv2.THRESH_BINARY, 11, 2)
+                                cv2.THRESH_BINARY, 11, 2)
     titles = ['Original Image', 'Global Thresholding (v = 127)',
               'Adaptive Mean Thresholding', 'Adaptive Gaussian Thresholding']
     images = [img, th1, th2, th3]
